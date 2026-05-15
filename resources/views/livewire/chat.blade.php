@@ -24,7 +24,7 @@
                 @forelse ($users as $user)
 
                     <div wire:click="selectUser({{ $user->id }})" class="p-3 cursor-pointer hover:bg-blue-100 transition 
-                                {{ $selectedUser && $selectedUser->id === $user->id ? 'bg-blue-200' : '' }}">
+                                            {{ $selectedUser && $selectedUser->id === $user->id ? 'bg-blue-200' : '' }}">
 
                         <div class="text-gray-800 font-medium">
                             {{ $user->name }}
@@ -55,26 +55,40 @@
             <div class="p-4 border-b bg-gray-50">
 
                 <div class="text-lg font-semibold text-gray-800">
-                    {{ $selectedUser->name }}
+                    {{ $selectedUser?->name }}
                 </div>
 
                 <div class="text-xs text-gray-500">
-                    {{ $selectedUser->email }}
+                    {{ $selectedUser?->email }}
                 </div>
 
             </div>
 
             <!-- Messages -->
-            <div class="flex-1 p-4 overflow-y-auto space-y-2 bg-gray-50">
+            <div id="chat-box" class="flex-1 p-4 overflow-y-auto bg-gray-50 flex flex-col gap-3">
 
-                @foreach ($messages as $message)
-                    <div class="flex justify-end {{ $message->sender_id === auth()->id() ? 'justify-end' : 'justify-start' }}">
-                        <div class="max-w-xs px-4 py-2 rounded-2xl shadow
-                         {{ $message->sender_id === auth()->id() ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-800' }}">
+                @forelse ($messages as $message)
+
+                    <div wire:key="message-{{ $message->id }}"
+                        class="{{ $message->sender_id == auth()->id() ? 'flex justify-end' : 'flex justify-start' }}">
+
+                        <div
+                            class="max-w-xs px-4 py-2 rounded-2xl shadow break-words
+                                    {{ $message->sender_id == auth()->id() ? 'bg-blue-600 text-white' : 'bg-gray-200 text-black'}}">
+
                             {{ $message->message }}
+
                         </div>
+
                     </div>
-                @endforeach
+
+                @empty
+
+                    <div class="text-gray-500 text-sm">
+                        No messages yet.
+                    </div>
+
+                @endforelse
 
             </div>
 
@@ -97,3 +111,28 @@
     </div>
 
 </div>
+
+<script>
+    document.addEventListener('livewire:initialized', () => {
+
+        const chatBox = document.getElementById('chat-box');
+
+        function scrollToBottom() {
+            setTimeout(() => {
+                chatBox.scrollTo({
+                    top: chatBox.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }, 100);
+        }
+
+        // Initial scroll
+        scrollToBottom();
+
+        // Every Livewire update
+        Livewire.hook('morphed', () => {
+            scrollToBottom();
+        });
+
+    });
+</script>

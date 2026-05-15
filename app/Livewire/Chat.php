@@ -36,6 +36,7 @@ class Chat extends Component
         if (!$this->selectedUser)
             return;
 
+
         $this->messages = ChatMessage::where(function ($query) {
 
             $query->where('sender_id', auth()->id())
@@ -47,6 +48,7 @@ class Chat extends Component
                 ->where('receiver_id', auth()->id());
 
         })->latest()->get()->reverse();
+
     }
 
     public function selectUser($userId)
@@ -58,41 +60,46 @@ class Chat extends Component
 
     public function submit()
     {
-        if (!$this->newMessage)
+        if (!$this->newMessage || !$this->selectedUser) {
             return;
+        }
 
         $message = ChatMessage::create([
-
             'sender_id' => Auth::id(),
-
             'receiver_id' => $this->selectedUser->id,
-
             'message' => $this->newMessage,
-
         ]);
 
 
+        // Load relationships
+        $message->load('sender', 'receiver');
+
+        // Push message instantly in UI
         $this->messages->push($message);
 
+
+        // Clear input
         $this->newMessage = '';
 
-        broadcast(new MessageSent($message));
+        \Log::info('Broadcasting Event');
+
+        // Broadcast to other users only
+        broadcast(new MessageSent($message))->toOthers();
     }
 
     public function getListeners()
     {
         return [
-            "echo-private:chat.{$this->loginId}, MessageSent" => 'newChatMessageNotification',
+            "echo-private:chat.{$this->loginId},MessageSent" => 'newChatMessageNotification',
         ];
     }
 
     public function newChatMessageNotification($message)
     { //for listening to the event and updating the chat in real time
 
-        if ($message['sender_id'] == $this->selectedUser->id) {
-            $messageObj = ChatMessage::find($message['id']);
-            $this->messages->push($messageObj);
-        }
+        $this->messages->push(
+            ChatMessage::find($message['id'])
+        );
     }
 
     public function render()

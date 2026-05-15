@@ -44,4 +44,13 @@ class User extends Authenticatable
             ->implode('');
     }
 
+    public function sentMessages()
+    {
+        return $this->hasMany(ChatMessage::class, 'sender_id');
+    }
+
+    public function receivedMessages()
+    {
+        return $this->hasMany(ChatMessage::class, 'receiver_id');
+    }
 }

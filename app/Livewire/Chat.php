@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Events\MessageSent;
+use App\Events\UnreadMessage;
 use App\Models\ChatMessage;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -16,6 +17,7 @@ class Chat extends Component
     public $messages;
     public $authId;
     public $loginId;
+    public $unreadCounts = [];
 
     public function mount()
     {
@@ -28,6 +30,13 @@ class Chat extends Component
         $this->authId = Auth::id();
 
         $this->loginId = Auth::id();
+
+        foreach ($this->users as $user) {
+
+            $this->unreadCounts[$user->id] = ChatMessage::where('sender_id', $user->id)->where('receiver_id', Auth::id())->where('is_read', false)->count();
+        }
+
+
 
     }
 
@@ -54,6 +63,10 @@ class Chat extends Component
     public function selectUser($userId)
     {
         $this->selectedUser = User::find($userId);
+
+        ChatMessage::where('sender_id', $userId)->where('receiver_id', Auth::id())->where('is_read', false)->update(['is_read' => true]);
+
+        $this->unreadCounts[$userId] = 0;
 
         $this->loadMessages();
     }
@@ -85,14 +98,40 @@ class Chat extends Component
 
         // Broadcast to other users only
         broadcast(new MessageSent($message))->toOthers();
+
+        $unreadMessageCount = ChatMessage::where('sender_id', Auth::id())->where('receiver_id', $this->selectedUser->id)->where('is_read', false)->count();
+
+        broadcast(new UnreadMessage(
+            Auth::id(),
+            $this->selectedUser->id,
+            $unreadMessageCount
+        ));
     }
+
 
     public function getListeners()
     {
         return [
             "echo-private:chat.{$this->loginId},MessageSent" => 'newChatMessageNotification',
+
+            "echo-private:unread-channel.{$this->loginId},UnreadMessage" => 'updateUnreadCount',
         ];
     }
+
+    public function updateUnreadCount($data)
+    {
+        $senderId = $data['sender_id'];
+
+        $this->unreadCounts[$senderId] = $data['unreadMessageCount'];
+
+        // Move latest chat to top
+        $this->users = $this->users->sortByDesc(function ($user) use ($senderId) {
+
+            return $user->id == $senderId;
+
+        });
+    }
+
 
     public function newChatMessageNotification($message)
     { //for listening to the event and updating the chat in real time

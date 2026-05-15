@@ -23,18 +23,35 @@
 
                 @forelse ($users as $user)
 
-                    <div wire:click="selectUser({{ $user->id }})" class="p-3 cursor-pointer hover:bg-blue-100 transition 
-                                            {{ $selectedUser && $selectedUser->id === $user->id ? 'bg-blue-200' : '' }}">
+                        <div wire:click="selectUser({{ $user->id }})" wire:key="user-{{ $user->id }}" class="p-3 cursor-pointer hover:bg-blue-100 transition
+                    {{ $selectedUser && $selectedUser->id === $user->id ? 'bg-blue-200' : '' }}">
 
-                        <div class="text-gray-800 font-medium">
-                            {{ $user->name }}
+                            <div class="flex items-center justify-between">
+
+                                <div>
+
+                                    <div class="text-gray-800 font-medium">
+                                        {{ $user->name }}
+                                    </div>
+
+                                    <div class="text-xs text-gray-500">
+                                        {{ $user->email }}
+                                    </div>
+
+                                </div>
+
+                                @if(isset($unreadCounts[$user->id]) && $unreadCounts[$user->id] > 0)
+
+                                    <div
+                                        class="bg-red-500 text-white text-xs min-w-[20px] h-5 rounded-full flex items-center justify-center px-1">
+                                        {{ $unreadCounts[$user->id] }}
+                                    </div>
+
+                                @endif
+
+                            </div>
+
                         </div>
-
-                        <div class="text-xs text-gray-500">
-                            {{ $user->email }}
-                        </div>
-
-                    </div>
 
                 @empty
 
@@ -74,7 +91,7 @@
 
                         <div
                             class="max-w-xs px-4 py-2 rounded-2xl shadow break-words
-                                    {{ $message->sender_id == auth()->id() ? 'bg-blue-600 text-white' : 'bg-gray-200 text-black'}}">
+                                                {{ $message->sender_id == auth()->id() ? 'bg-blue-600 text-white' : 'bg-gray-200 text-black'}}">
 
                             {{ $message->message }}
 
@@ -91,6 +108,7 @@
                 @endforelse
 
             </div>
+
 
             <!-- Input -->
             <form wire:submit="submit" class="p-4 border-t bg-white flex items-center gap-2">
@@ -135,4 +153,5 @@
         });
 
     });
+
 </script>

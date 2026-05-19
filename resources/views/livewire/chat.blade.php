@@ -63,7 +63,8 @@
 
                     </button>
 
-                    <button type="button" wire:click="$set('showGroupPopup', false)" class="bg-gray-300 px-4 py-2 rounded">
+                    <button type="button" wire:click="$set('showGroupPopup', false)"
+                        class="bg-gray-300 px-4 py-2 rounded">
 
                         Cancel
 
@@ -96,31 +97,50 @@
 
 
             <div class="divide-y">
-
                 <!-- GROUPS -->
 
                 @foreach($groups as $group)
 
-                                <div wire:click="selectGroup({{ $group->id }})" class="p-3 cursor-pointer hover:bg-blue-100 transition
+                            <div wire:click="selectGroup({{ $group->id }})" wire:key="group-{{ $group->id }}" class="p-3 cursor-pointer hover:bg-blue-100 transition
                      {{ $selectedGroup && $selectedGroup->id === $group->id ? 'bg-blue-200' : '' }}">
 
-                                    <div class="text-gray-800 font-medium">
-                                        👥 {{ $group->name }}
+                                <div class="flex items-center justify-between">
+
+                                    <div>
+
+                                        <div class="text-gray-800 font-medium">
+                                            👥 {{ $group->name }}
+                                        </div>
+
+                                        <div class="text-xs text-gray-500">
+                                            Group Chat
+                                        </div>
+
                                     </div>
 
-                                    <div class="text-xs text-gray-500">
-                                        Group Chat
-                                    </div>
+                                    <!-- UNREAD BADGE -->
+
+                                   @if(isset($groupUnreadCounts[$group->id]) && $groupUnreadCounts[$group->id] > 0)
+
+                                        <div
+                                            class="bg-red-500 text-white text-xs min-w-[20px] h-5 rounded-full flex items-center justify-center px-1">
+
+                                            {{ $groupUnreadCounts[$group->id] }}
+
+                                        </div>
+
+                                    @endif
 
                                 </div>
 
-                @endforeach
+                            </div>
 
+                @endforeach
                 @forelse ($users as $user)
 
                     <div wire:click="selectUser({{ $user->id }})" wire:key="user-{{ $user->id }}"
                         class="p-3 cursor-pointer hover:bg-blue-100 transition
-                                                                {{ $selectedUser && $selectedUser->id === $user->id ? 'bg-blue-200' : '' }}">
+                                                                                    {{ $selectedUser && $selectedUser->id === $user->id ? 'bg-blue-200' : '' }}">
 
                         <div class="flex items-center justify-between">
 
@@ -175,7 +195,7 @@
                     @if($isGroupChat)
 
                         <div class="text-xs text-gray-500">
-                            Group Chat
+                            {{ $users->whereIn('id', $selectedGroup?->users->pluck('id'))->pluck('name')->join(', ') }}
                         </div>
 
                     @else
@@ -187,11 +207,23 @@
                     @endif
                 </div>
 
-                <button wire:click="muteUser" class="text-xl">
+                @if($isGroupChat)
 
-                    {{ $isMuted ? '🔕' : '🔔' }}
+                    <button wire:click="muteGroup" class="text-xl">
 
-                </button>
+                        {{ $isGroupMuted ? '🔕' : '🔔' }}
+
+                    </button>
+
+                @else
+
+                    <button wire:click="muteUser" class="text-xl">
+
+                        {{ $isMuted ? '🔕' : '🔔' }}
+
+                    </button>
+
+                @endif
             </div>
 
             <!-- Messages -->
@@ -204,7 +236,7 @@
 
                         <div
                             class="max-w-xs px-4 py-2 rounded-2xl shadow break-words
-                                                                                            {{ $message->sender_id == auth()->id() ? 'bg-blue-600 text-white' : 'bg-gray-200 text-black'}}">
+                                                                                                                {{ $message->sender_id == auth()->id() ? 'bg-blue-600 text-white' : 'bg-gray-200 text-black'}}">
 
                             {{ $message->message }}
 

@@ -2,12 +2,15 @@
 
 namespace App\Livewire;
 
+use App\Events\GroupUnreadMessage;
 use App\Events\MessageSent;
 use App\Events\UnreadMessage;
 use App\Models\ChatMessage;
 use App\Models\Group;
 use App\Models\GroupMessage;
+use App\Models\GroupRead;
 use App\Models\MutedChat;
+use App\Models\MutedGroup;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
@@ -28,17 +31,40 @@ class Chat extends Component
     public $selectedGroup = null;
     public $isGroupChat = false;
     public $showGroupPopup = false;
+    public $isGroupMuted = false;
+    public $groupUnreadCounts = [];
 
-    public function mount()
+    function loadgroupdata()
     {
-        $this->users = User::where('id', '!=', auth()->id())->latest()->get(); //latest users show karo
 
         $this->groups = auth()->user()->groups()->latest()->get(); //latest groups show karo
 
+        $this->groupUnreadCounts = [];
 
-        //ki agar koi user already select hai toh usko show karo warna first user ka chat show karo
+        foreach ($this->groups as $group) {
+            $lastReadAt = GroupRead::where('group_id', $group->id)
+                ->where('user_id', Auth::id())
+                ->value('last_read_at');
 
-        $selectedUserId = session('selected_user_id');
+            $query = GroupMessage::where('group_id', $group->id)
+                ->where('sender_id', '!=', Auth::id());
+
+            if ($lastReadAt) {
+                $query->where('created_at', '>', $lastReadAt);
+            }
+
+            $this->groupUnreadCounts[$group->id] = $query->count();
+        }
+    }
+
+    public function mount()
+    {
+        $this->users = User::where('id', '!=', auth()->id())->latest()->get(); //latest users show 
+
+        $this->loadgroupdata(); //Create file for loadgroupdata function in app/Livewire/Chat.php and move group loading logic there for better organization
+
+      
+        $selectedUserId = session('selected_user_id'); //when refresh page still selected user show  karne ke liye session se selected user id le lo
 
         if ($selectedUserId) {
 
@@ -62,10 +88,13 @@ class Chat extends Component
 
         $this->loadMessages();
 
+        // auth
         $this->authId = Auth::id();
 
+        // Login user id for private channels
         $this->loginId = Auth::id();
 
+        // UNREAD COUNT and MUTE CHECK
         foreach ($this->users as $user) {
 
             foreach ($this->users as $user) {
@@ -90,7 +119,6 @@ class Chat extends Component
                 }
             }
         }
-
 
 
     }
@@ -144,11 +172,14 @@ class Chat extends Component
 
         if ($this->isGroupChat) {
 
-            GroupMessage::create([
+            $message = GroupMessage::create([
                 'group_id' => $this->selectedGroup->id,
                 'sender_id' => auth()->id(),
                 'message' => $this->newMessage,
             ]);
+
+            // BROADCAST NEW GROUP MESSAGE TO OTHER MEMBERS
+            broadcast(new GroupUnreadMessage($this->selectedGroup->id, 1, ['id' => $message->id]))->toOthers();
 
             $this->loadGroupMessages();
 
@@ -204,6 +235,9 @@ class Chat extends Component
             "echo-private:chat.{$this->loginId},MessageSent" => 'newChatMessageNotification',
 
             "echo-private:unread-channel.{$this->loginId},UnreadMessage" => 'updateUnreadCount',
+
+            "echo-private:group-unread,GroupUnreadMessage" => 'updateGroupUnreadCount',
+
         ];
     }
 
@@ -233,6 +267,7 @@ class Chat extends Component
             $this->unreadCounts[$senderId] = 0;
 
             return;
+
         }
 
         // Otherwise badge show karo
@@ -244,6 +279,40 @@ class Chat extends Component
             return $user->id == $senderId;
 
         });
+    }
+
+    // Jab group me new message aaye toh agar current selected group ka message hai toh usko show karo otherwise badge update karo
+    public function updateGroupUnreadCount($data)
+    {
+        $groupId = $data['groupId'];
+
+        // SAME GROUP OPEN HAI
+
+        if (
+            $this->selectedGroup &&
+            $this->selectedGroup->id == $groupId
+        ) {
+            if (!empty($data['message']['id'])) {
+                $groupMessage = GroupMessage::find($data['message']['id']);
+                if ($groupMessage) {
+                    $this->messages->push($groupMessage);
+                }
+            }
+
+            GroupRead::updateOrCreate(
+                ['group_id' => $groupId, 'user_id' => Auth::id()],
+                ['last_read_at' => now()]
+            );
+
+            unset($this->groupUnreadCounts[$groupId]);
+
+            return;
+        }
+
+        // SHOW BADGE
+
+        $this->groupUnreadCounts[$groupId] =
+            ($this->groupUnreadCounts[$groupId] ?? 0) + $data['unreadMessageCount'];
     }
 
     // Jab new message aaye toh agar current selected user ka message hai toh usko show karo otherwise badge update karo
@@ -280,31 +349,6 @@ class Chat extends Component
 
         // Add on top
         $this->users->prepend($selected);
-    }
-
-    public function muteUser()
-    {
-        $mute = MutedChat::where('user_id', auth()->id())
-            ->where('muted_user_id', $this->selectedUser->id)
-            ->first();
-
-        // UNMUTE
-        if ($mute) {
-
-            $mute->delete();
-
-            $this->isMuted = false;
-
-        } else {
-
-            // MUTE
-            MutedChat::create([
-                'user_id' => auth()->id(),
-                'muted_user_id' => $this->selectedUser->id,
-            ]);
-
-            $this->isMuted = true;
-        }
     }
 
     public function createGroup()
@@ -364,7 +408,18 @@ class Chat extends Component
 
         $this->selectedUser = null;
 
+        $this->isGroupMuted = MutedGroup::where('user_id', auth()->id())
+            ->where('group_id', $groupId)
+            ->exists();
+
         $this->loadGroupMessages();
+
+        GroupRead::updateOrCreate(
+            ['group_id' => $groupId, 'user_id' => Auth::id()],
+            ['last_read_at' => now()]
+        );
+
+        unset($this->groupUnreadCounts[$groupId]);
     }
 
     public function loadGroupMessages()
@@ -375,6 +430,57 @@ class Chat extends Component
             ->reverse();
     }
 
+    public function muteUser()
+    {
+        $mute = MutedChat::where('user_id', auth()->id())
+            ->where('muted_user_id', $this->selectedUser->id)
+            ->first();
+
+        // UNMUTE
+        if ($mute) {
+
+            $mute->delete();
+
+            $this->isMuted = false;
+
+        } else {
+
+            // MUTE
+            MutedChat::create([
+                'user_id' => auth()->id(),
+                'muted_user_id' => $this->selectedUser->id,
+            ]);
+
+            $this->isMuted = true;
+        }
+    }
+
+    public function muteGroup()
+    {
+        $mute = MutedGroup::where('user_id', auth()->id())
+            ->where('group_id', $this->selectedGroup->id)
+            ->first();
+
+        // UNMUTE
+
+        if ($mute) {
+
+            $mute->delete();
+
+            $this->isGroupMuted = false;
+
+        } else {
+
+            // MUTE
+
+            MutedGroup::create([
+                'user_id' => auth()->id(),
+                'group_id' => $this->selectedGroup->id,
+            ]);
+
+            $this->isGroupMuted = true;
+        }
+    }
 
     public function render()
     {

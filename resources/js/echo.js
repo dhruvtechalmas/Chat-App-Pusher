@@ -10,3 +10,4 @@ window.Echo = new Echo({
     forceTLS: true,
     enabledTransports: ["ws", "wss"],
 });
+

@@ -8,4 +8,9 @@ Broadcast::channel('chat.{receiver_id}', function ($user, $receiver_id) {
 
 Broadcast::channel('unread-channel.{receiver_id}', function ($user, $receiver_id) {
     return (int) $user->id === (int) $receiver_id;
+
+});
+
+Broadcast::channel('group-unread', function ($user) {
+    return true;
 });

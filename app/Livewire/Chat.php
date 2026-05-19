@@ -167,6 +167,28 @@ class Chat extends Component
         $this->loadMessages();
     }
 
+        public function selectGroup($groupId)
+    {
+        $this->selectedGroup = Group::find($groupId);
+
+        $this->isGroupChat = true;
+
+        $this->selectedUser = null;
+
+        $this->isGroupMuted = MutedGroup::where('user_id', auth()->id())
+            ->where('group_id', $groupId)
+            ->exists();
+
+        $this->loadGroupMessages();
+
+        GroupRead::updateOrCreate(
+            ['group_id' => $groupId, 'user_id' => Auth::id()],
+            ['last_read_at' => now()]
+        );
+
+        unset($this->groupUnreadCounts[$groupId]);
+    }
+
     public function submit()
     {
 
@@ -350,6 +372,7 @@ class Chat extends Component
         // Add on top
         $this->users->prepend($selected);
     }
+    
 
     public function createGroup()
     {
@@ -400,27 +423,7 @@ class Chat extends Component
         session()->flash('success', 'Group Created Successfully');
     }
 
-    public function selectGroup($groupId)
-    {
-        $this->selectedGroup = Group::find($groupId);
 
-        $this->isGroupChat = true;
-
-        $this->selectedUser = null;
-
-        $this->isGroupMuted = MutedGroup::where('user_id', auth()->id())
-            ->where('group_id', $groupId)
-            ->exists();
-
-        $this->loadGroupMessages();
-
-        GroupRead::updateOrCreate(
-            ['group_id' => $groupId, 'user_id' => Auth::id()],
-            ['last_read_at' => now()]
-        );
-
-        unset($this->groupUnreadCounts[$groupId]);
-    }
 
     public function loadGroupMessages()
     {
@@ -445,7 +448,7 @@ class Chat extends Component
 
         } else {
 
-            // MUTE
+            // MUTE always show unread count 0
             MutedChat::create([
                 'user_id' => auth()->id(),
                 'muted_user_id' => $this->selectedUser->id,
@@ -471,7 +474,7 @@ class Chat extends Component
 
         } else {
 
-            // MUTE
+            // MUTE always show unread count 0
 
             MutedGroup::create([
                 'user_id' => auth()->id(),
